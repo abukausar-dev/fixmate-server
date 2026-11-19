@@ -5,6 +5,9 @@ import { verifyToken } from './middleware/verifyToken.js';
 import { verifyAdmin } from './middleware/verifyAdmin.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import type { AuthenticatedRequest } from './types/auth.js';
+import uploadRoutes from "./routes/upload.routes.js";
+import serviceRoutes from "./routes/service.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 
 dotenv.config({ quiet: true });
 
@@ -51,6 +54,11 @@ app.get(
         });
     }
 );
+
+// Mount Routers
+app.use("/api/uploads", uploadRoutes);
+app.use("/api/services", serviceRoutes);
+app.use("/api/admin", adminRoutes);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {
