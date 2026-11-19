@@ -204,3 +204,145 @@ export async function cancelMyBooking(
         next(error);
     }
 }
+
+// Strict state machine transition rules (Challenge 3)
+const ALLOWED_STATUS_TRANSITIONS: Record<string, readonly string[]> = {
+    requested: ["accepted", "rejected"],
+    accepted: ["in-progress"],
+    "in-progress": ["completed"],
+    completed: [],
+    rejected: [],
+    cancelled: [],
+};
+
+// 4. TECHNICIAN — List Only Bookings Assigned to Logged-in Technician
+export async function getTechnicianBookings(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> {
+    try {
+        if (!req.user) throw new AppError(401, "Unauthorized");
+
+        const db = getDB();
+        const bookings = await db
+            .collection("bookings")
+            .find({ technicianEmail: req.user.email })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.status(200).json({
+            success: true,
+            count: bookings.length,
+            data: bookings,
+        });
+    } catch (error) {
+        next(error);
+    }
+}
+
+// 5. TECHNICIAN — Server-Enforced Status State Machine (Challenge 3)
+export async function updateBookingStatus(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+): Promise<void> {
+    try {
+        if (!req.user) throw new AppError(401, "Unauthorized");
+
+        const id = asString(req.params.id);
+        if (!id || !ObjectId.isValid(id)) {
+            throw new AppError(400, "Invalid booking ID");
+        }
+
+        const targetStatus = req.body.status as
+            | "accepted"
+            | "rejected"
+            | "in-progress"
+            | "completed";
+        const finalAmount = req.body.finalAmount as number | undefined;
+        const technicianNote = req.body.technicianNote as string | undefined;
+
+        const db = getDB();
+        const bookingObjectId = new ObjectId(id);
+
+        const existing = await db
+            .collection("bookings")
+            .findOne({ _id: bookingObjectId });
+
+        if (!existing) {
+            throw new AppError(404, "Booking not found");
+        }
+
+        // Strict ownership enforcement: technicians can only update their own assigned jobs
+        if (existing.technicianEmail !== req.user.email) {
+            throw new AppError(
+                403,
+                "Forbidden: you can only update bookings assigned to you"
+            );
+        }
+
+        // State machine check: prevent skipping steps or mutating terminal bookings
+        const allowedNext = ALLOWED_STATUS_TRANSITIONS[existing.status] || [];
+        if (!allowedNext.includes(targetStatus)) {
+            throw new AppError(
+                400,
+                `Invalid status transition: cannot move booking from "${existing.status}" to "${targetStatus}"`
+            );
+        }
+
+        const now = new Date();
+        const setFields: Record<string, unknown> = {
+            status: targetStatus,
+            updatedAt: now,
+        };
+
+        if (technicianNote !== undefined && technicianNote.length > 0) {
+            setFields.technicianNote = technicianNote;
+        }
+
+        if (targetStatus === "completed") {
+            if (typeof finalAmount !== "number" || finalAmount <= 0) {
+                throw new AppError(
+                    400,
+                    "A valid positive final amount is required to complete the job"
+                );
+            }
+            setFields.finalAmount = Number(finalAmount.toFixed(2));
+            setFields.completedAt = now;
+        }
+
+        const updateDoc: Record<string, unknown> = { $set: setFields };
+
+        // Release unique activeRequestKey once the job reaches a terminal state
+        if (targetStatus === "completed" || targetStatus === "rejected") {
+            updateDoc.$unset = { activeRequestKey: "" };
+        }
+
+        // Atomic conditional write prevents race conditions on concurrent requests
+        const updated = await db.collection("bookings").findOneAndUpdate(
+            {
+                _id: bookingObjectId,
+                technicianEmail: req.user.email,
+                status: existing.status,
+            },
+            updateDoc,
+            { returnDocument: "after" }
+        );
+
+        if (!updated) {
+            throw new AppError(
+                409,
+                "Booking status changed concurrently. Please refresh and try again."
+            );
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Booking moved to "${targetStatus}"`,
+            data: updated,
+        });
+    } catch (error) {
+        next(error);
+    }
+}

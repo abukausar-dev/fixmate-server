@@ -32,3 +32,39 @@ export const createBookingSchema = z.object({
         .min(20, "Please describe the problem in at least 20 characters")
         .max(1500, "Problem description cannot exceed 1500 characters"),
 });
+
+export const TECHNICIAN_TARGET_STATUSES = [
+    "accepted",
+    "rejected",
+    "in-progress",
+    "completed",
+] as const;
+
+export const updateBookingStatusSchema = z
+    .object({
+        status: z.enum(TECHNICIAN_TARGET_STATUSES, {
+            message: "Status must be accepted, rejected, in-progress, or completed",
+        }),
+        finalAmount: z.coerce
+            .number()
+            .positive("Final amount must be greater than 0")
+            .max(100000, "Final amount is too high")
+            .optional(),
+        technicianNote: z
+            .string()
+            .trim()
+            .max(500, "Technician note cannot exceed 500 characters")
+            .optional(),
+    })
+    .superRefine((data, ctx) => {
+        if (
+            data.status === "completed" &&
+            (data.finalAmount === undefined || Number.isNaN(data.finalAmount))
+        ) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["finalAmount"],
+                message: "Final amount is required when marking a job as completed",
+            });
+        }
+    });
