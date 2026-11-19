@@ -8,6 +8,7 @@ import type { AuthenticatedRequest } from './types/auth.js';
 import uploadRoutes from "./routes/upload.routes.js";
 import serviceRoutes from "./routes/service.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import bookingRoutes from "./routes/booking.routes.js";
 
 dotenv.config({ quiet: true });
 
@@ -59,6 +60,7 @@ app.get(
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/bookings", bookingRoutes);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {
