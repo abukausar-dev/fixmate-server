@@ -10,6 +10,8 @@ import serviceRoutes from "./routes/service.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import bookingRoutes from "./routes/booking.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import paymentRoutes from "./routes/payment.routes.js";
+import { handleStripeWebhook } from "./controllers/payment.controller.js";
 
 dotenv.config({ quiet: true });
 
@@ -22,6 +24,14 @@ app.use(
         credentials: true,
     })
 );
+
+// Stripe Webhook MUST receive the raw Buffer body BEFORE express.json() parses it
+app.post(
+    "/api/payments/webhook",
+    express.raw({ type: "application/json" }),
+    handleStripeWebhook
+);
+
 app.use(express.json());
 
 // Health Check API
@@ -63,6 +73,7 @@ app.use("/api/services", serviceRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/payments", paymentRoutes);
 
 // 404 Route Handler
 app.use((_req: Request, res: Response) => {
