@@ -79,7 +79,7 @@ Express.js and MongoDB REST API powering **FixMate**, providing JWT verification
 
 ### 1. Clone and Install Dependencies
 ```bash
-git clone <YOUR_SERVER_GITHUB_REPO_URL>
+git clone https://github.com/abukausar-dev/fixmate-server
 cd fixmate-server
 pnpm install
 ```
